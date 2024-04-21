@@ -2,24 +2,50 @@ package whatsapp
 
 import (
 	"context"
+
+	"github.com/febriliankr/whatsapp-cloud-api"
+	"github.com/pkg/errors"
 )
 
 // Service encapsulates the WhatsApp client along with internal state for storing contacts.
-type Service struct{}
+type WhatsApp struct {
+	client       *whatsapp.Whatsapp
+	phoneNumbers []string
+}
 
 // New returns a new instance of a WhatsApp notification service.
-func New() (*Service, error) { return &Service{}, nil }
+func New(token string, phoneID string) (*WhatsApp, error) {
+	client := whatsapp.NewWhatsapp(token, phoneID)
 
-// LoginWithSessionCredentials provides helper for authentication using whatsapp.Session credentials.
-func (s *Service) LoginWithSessionCredentials(_, _, _, _ string, _, _ []byte) error { return nil }
+	w := &WhatsApp{
+		client:       client,
+		phoneNumbers: []string{},
+	}
 
-// LoginWithQRCode provides helper for authentication using QR code on terminal.
-// Refer: https://github.com/Rhymen/go-whatsapp#login for more information.
-func (s *Service) LoginWithQRCode() error { return nil }
+	return w, nil
+}
 
 // AddReceivers takes WhatsApp contacts and adds them to the internal contacts list. The Send method will send
 // a given message to all those contacts.
-func (s *Service) AddReceivers(_ ...string) {}
+func (s *WhatsApp) AddReceivers(phoneNumbers ...string) {
+	s.phoneNumbers = append(s.phoneNumbers, phoneNumbers...)
+}
 
 // Send takes a message subject and a message body and sends them to all previously set contacts.
-func (s *Service) Send(_ context.Context, _, _ string) error { return nil }
+func (s *WhatsApp) Send(ctx context.Context, subject, message string) error {
+	fullMessage := subject + "\n" + message
+
+	for _, phoneNumber := range s.phoneNumbers {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			_, err := s.client.SendText(phoneNumber, fullMessage)
+			if err != nil {
+				return errors.Wrapf(err, "failed to send message to %s", phoneNumber)
+			}
+		}
+	}
+
+	return nil
+}
